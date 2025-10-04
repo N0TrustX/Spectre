@@ -1,6 +1,5 @@
-# Spectre
-The keys to the Kingdom
+# Spectre -The keys to the Kingdom
 How to use:
-Download the .html
-Open in your browser
-provide the Hack ID
+1. Download the .html
+2. Open in your browser
+3. Provide the Hack ID
