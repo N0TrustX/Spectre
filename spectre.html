@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectre Exfil Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0a0a0a;
+            color: #00ff41;
+            font-family: 'Share Tech Mono', monospace;
+            background-image: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), 
+                              repeating-linear-gradient(0deg, transparent, transparent 2px, #111 2px, #111 4px);
+        }
+        .text-glow {
+            text-shadow: 0 0 5px #00ff41, 0 0 10px #00ff41;
+        }
+        .scanline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: linear-gradient(to bottom, rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 8px;
+            animation: scan 4s linear infinite;
+        }
+        .terminal-window {
+            border: 2px solid #00ff41;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.5);
+        }
+        .terminal-header {
+            background-color: #00ff41;
+            color: #0a0a0a;
+        }
+        .action-button {
+            background-color: transparent;
+            border: 2px solid #00ff41;
+            color: #00ff41;
+            transition: all 0.3s ease;
+        }
+        .action-button:hover {
+            background-color: #00ff41;
+            color: #0a0a0a;
+            box-shadow: 0 0 15px #00ff41;
+        }
+        .modal-overlay {
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(5px);
+        }
+        .modal-input {
+            background-color: #111;
+            border: 1px solid #00ff41;
+            color: #00ff41;
+        }
+        .modal-input::placeholder {
+            color: #008a23;
+        }
+        .modal-input:focus {
+            outline: none;
+            box-shadow: 0 0 10px #00ff41;
+        }
+        #typing-cursor {
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes scan {
+            from { background-position: 0 0; }
+            to { background-position: 0 -8px; }
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="scanline"></div>
+    <div class="w-full max-w-2xl">
+        <div class="terminal-window bg-black bg-opacity-75 rounded-lg overflow-hidden">
+            <div class="terminal-header font-bold p-2 text-center">
+                S P E C T R E // EXFIL_TOOL_v2.1
+            </div>
+            <div class="p-6">
+                <div id="terminal-text" class="h-48 overflow-y-auto">
+                    <span id="typing-text"></span><span id="typing-cursor">█</span>
+                </div>
+                <div class="text-center mt-6">
+                    <button id="retrieveHackBtn" class="action-button font-bold py-3 px-8 rounded-lg text-lg">
+                        [ Retrieve Hack ]
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hack ID Modal -->
+    <div id="hackIdModal" class="fixed inset-0 w-full h-full flex items-center justify-center modal-overlay hidden z-50">
+        <div class="terminal-window bg-black rounded-lg p-8 w-full max-w-sm m-4">
+            <h2 class="text-2xl font-bold text-glow mb-6 text-center">Authentication Required</h2>
+            <form id="hackIdForm">
+                <label for="hackIdInput" class="block mb-2">Enter Retrieval ID:</label>
+                <input type="text" id="hackIdInput" class="modal-input w-full p-3 rounded-lg mb-4" autocomplete="off">
+                <p id="errorMsg" class="text-red-500 text-center mb-4 h-4"></p>
+                <button type="submit" class="w-full action-button font-bold py-2 rounded-lg">Authenticate</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Payload Modal -->
+    <div id="payloadModal" class="fixed inset-0 w-full h-full flex items-center justify-center modal-overlay hidden z-50">
+        <div class="terminal-window bg-black rounded-lg p-8 w-full max-w-2xl m-7 text-center">
+            <h2 class="text-3xl font-bold text-glow mb-4">Payload Retrieved</h2>
+            <p class="text-lg mb-6">Object Data:</p>
+            <!-- This div will hold the DECODED object -->
+            <div id="decodedPayloadContainer" class="bg-gray-900 p-9 rounded-lg text-2xl font-bold text-yellow-400">
+                <!-- The decoded object will appear here -->
+            </div>
+            <!-- The Base64 encoded object is stored here, hidden from view -->
+            <div id="encodedPayload" class="hidden">ZmxhZ3trbDF6a2xqaTJkeWNxZWRqNmVmNnltbHJzZjE4MGQwZn0=</div>
+            <button id="closePayloadBtn" class="mt-8 action-button font-bold py-2 px-6 rounded-lg">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Typing Animation ---
+        const textLines = [
+            "Initializing Spectre Exfil v2.1...",
+            "Connecting to remote server...",
+            "Accessing encrypted data payload...",
+            "Payload located. Awaiting retrieval command."
+        ];
+        const typingTextEl = document.getElementById('typing-text');
+        let lineIndex = 0;
+        let charIndex = 0;
+
+        function type() {
+            if (lineIndex < textLines.length) {
+                if (charIndex < textLines[lineIndex].length) {
+                    typingTextEl.innerHTML += textLines[lineIndex].charAt(charIndex);
+                    charIndex++;
+                    setTimeout(type, 50);
+                } else {
+                    typingTextEl.innerHTML += '<br/>';
+                    lineIndex++;
+                    charIndex = 0;
+                    setTimeout(type, 500);
+                }
+            }
+        }
+        document.addEventListener('DOMContentLoaded', type);
+
+        // --- Modal Logic ---
+        const retrieveHackBtn = document.getElementById('retrieveHackBtn');
+        const hackIdModal = document.getElementById('hackIdModal');
+        const payloadModal = document.getElementById('payloadModal');
+        const hackIdForm = document.getElementById('hackIdForm');
+        const hackIdInput = document.getElementById('hackIdInput');
+        const errorMsg = document.getElementById('errorMsg');
+        const closePayloadBtn = document.getElementById('closePayloadBtn');
+
+        retrieveHackBtn.addEventListener('click', () => {
+            hackIdModal.classList.remove('hidden');
+            hackIdInput.focus();
+            errorMsg.textContent = '';
+        });
+
+        hackIdForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (hackIdInput.value === '471082') {
+                hackIdModal.classList.add('hidden');
+                hackIdInput.value = '';
+
+                // 1. Get the encoded payload from the hidden div
+                const encodedPayload = document.getElementById('encodedPayload').textContent;
+                
+                // 2. Decode the payload using atob()
+                const decodedPayload = atob(encodedPayload);
+
+                // 3. Display the decoded payload in its container
+                const decodedPayloadContainer = document.getElementById('decodedPayloadContainer');
+                decodedPayloadContainer.textContent = decodedPayload;
+
+                payloadModal.classList.remove('hidden');
+            } else {
+                errorMsg.textContent = 'ACCESS DENIED';
+                hackIdInput.value = '';
+            }
+        });
+
+        closePayloadBtn.addEventListener('click', () => {
+            payloadModal.classList.add('hidden');
+        });
+
+        // Close modals by clicking overlay
+        [hackIdModal, payloadModal].forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
